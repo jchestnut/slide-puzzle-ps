@@ -112,11 +112,7 @@
 
 <script>
 // ════════════════════════════════════════
-//  ★  SET YOUR IMAGE URL HERE  ★
-//  Use a direct image link (jpg/png/webp)
-//  For GitHub Pages: use the raw file URL
-//  e.g. 'https://raw.githubusercontent.com/YOU/REPO/main/puzzle.jpg'
-//  Or if in same folder: just 'puzzle.jpg'
+//  ★  YOUR IMAGE URL  ★
 // ════════════════════════════════════════
 const IMAGE_URL = 'https://raw.githubusercontent.com/jchestnut/slide-puzzle-ps/main/puzzle.jpg';
 // ════════════════════════════════════════
@@ -136,9 +132,11 @@ img.onload = () => {
   const scale = Math.max(300/img.width, 300/img.height);
   const w = img.width*scale, h = img.height*scale;
   srcCtx.drawImage(img, (300-w)/2, (300-h)/2, w, h);
-  initTiles();
+  shufflePuzzle(); // ← auto-shuffle on load
 };
 img.onerror = () => {
+  console.warn('Image failed to load:', IMAGE_URL);
+  // Fallback colored tiles so puzzle is still playable
   const cols=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#00bcd4'];
   for(let i=0;i<9;i++){
     srcCtx.fillStyle=cols[i]; srcCtx.fillRect((i%3)*100,Math.floor(i/3)*100,100,100);
@@ -146,7 +144,7 @@ img.onerror = () => {
     srcCtx.textAlign='center'; srcCtx.textBaseline='middle';
     srcCtx.fillText(i+1,(i%3)*100+50,Math.floor(i/3)*100+50);
   }
-  initTiles();
+  shufflePuzzle();
 };
 img.src = IMAGE_URL;
 
@@ -158,6 +156,7 @@ function initTiles(){
   stopTimer(); document.getElementById('win-overlay').classList.remove('show');
   renderGrid();
 }
+
 function shufflePuzzle(){
   tiles=Array.from({length:9},(_,i)=>i);
   let blank=8;
@@ -171,13 +170,16 @@ function shufflePuzzle(){
   stopTimer(); document.getElementById('win-overlay').classList.remove('show');
   renderGrid();
 }
+
 function resetPuzzle(){ initTiles(); }
+
 function neighbors(pos){
   const r=Math.floor(pos/3),c=pos%3,ns=[];
   if(r>0)ns.push(pos-3); if(r<2)ns.push(pos+3);
   if(c>0)ns.push(pos-1); if(c<2)ns.push(pos+1);
   return ns;
 }
+
 function renderGrid(){
   gridEl.innerHTML='';
   for(let pos=0;pos<9;pos++){
@@ -195,6 +197,7 @@ function renderGrid(){
     gridEl.appendChild(div);
   }
 }
+
 function handleClick(pos){
   const blank=tiles.indexOf(8);
   if(!neighbors(blank).includes(pos))return;
@@ -213,6 +216,7 @@ function handleClick(pos){
     },180);
   }
 }
+
 function startTimer(){
   timerInterval=setInterval(()=>{
     seconds++;
