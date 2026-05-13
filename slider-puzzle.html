@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slide Puzzle</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Space Mono', monospace;
+    background: transparent;
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 16px;
+    gap: 12px;
+  }
+  #puzzle-wrap { position: relative; }
+  #puzzle-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 100px);
+    grid-template-rows: repeat(3, 100px);
+    gap: 3px;
+  }
+  .tile {
+    width: 100px; height: 100px;
+    cursor: pointer;
+    border-radius: 4px;
+    overflow: hidden;
+    background-size: cover;
+    transition: box-shadow 0.15s, transform 0.1s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  }
+  .tile:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.28); transform: scale(1.02); }
+  .tile.empty {
+    background: transparent !important;
+    box-shadow: none; cursor: default;
+    transform: none !important;
+    outline: 2px dashed rgba(0,0,0,0.1);
+    border-radius: 4px;
+  }
+  .tile.pop { animation: pop 0.12s ease; }
+  @keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(0.93)} 100%{transform:scale(1)} }
+  #status-bar {
+    display: flex; gap: 20px;
+    font-size: 11px; color: #888; letter-spacing: 0.1em;
+  }
+  #status-bar b { color: #444; }
+  #controls { display: flex; gap: 8px; }
+  .ctrl-btn {
+    background: rgba(255,255,255,0.6);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(0,0,0,0.15);
+    color: #444;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 7px 16px; cursor: pointer; border-radius: 3px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .ctrl-btn:hover { background: rgba(255,255,255,0.9); border-color: rgba(0,0,0,0.3); }
+  #ref-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #ref-img {
+    width: 54px; height: 54px; object-fit: cover;
+    border-radius: 3px; border: 1px solid rgba(0,0,0,0.12);
+    opacity: 0.7; transition: opacity 0.2s;
+  }
+  #ref-img:hover { opacity: 1; }
+  #ref-label { font-size: 8px; color: #aaa; letter-spacing: 0.1em; text-transform: uppercase; }
+  #top-row { display: flex; align-items: flex-end; gap: 12px; }
+  #win-overlay {
+    display: none; position: absolute; inset: 0;
+    background: rgba(255,255,255,0.82);
+    backdrop-filter: blur(4px);
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; border-radius: 4px; z-index: 10;
+  }
+  #win-overlay.show { display: flex; }
+  #win-msg { font-size: 20px; font-weight: 700; letter-spacing: 0.05em; color: #222; }
+  #win-sub { font-size: 10px; color: #888; letter-spacing: 0.15em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<div id="top-row">
+  <div id="puzzle-wrap">
+    <div id="puzzle-grid"></div>
+    <div id="win-overlay">
+      <div id="win-msg">✓ SOLVED</div>
+      <div id="win-sub"></div>
+    </div>
+  </div>
+  <div id="ref-wrap">
+    <img id="ref-img" src="" alt="Reference">
+    <div id="ref-label">Goal</div>
+  </div>
+</div>
+
+<div id="status-bar">
+  MOVES <b id="move-count">0</b> &nbsp;·&nbsp; TIME <b id="time-display">0:00</b>
+</div>
+
+<div id="controls">
+  <button class="ctrl-btn" onclick="shufflePuzzle()">Shuffle</button>
+  <button class="ctrl-btn" onclick="resetPuzzle()">Reset</button>
+</div>
+
+<canvas id="source-canvas" style="display:none" width="300" height="300"></canvas>
+
+<script>
+// ════════════════════════════════════════
+//  ★  SET YOUR IMAGE URL HERE  ★
+//  Use a direct image link (jpg/png/webp)
+//  For GitHub Pages: use the raw file URL
+//  e.g. 'https://raw.githubusercontent.com/YOU/REPO/main/puzzle.jpg'
+//  Or if in same folder: just 'puzzle.jpg'
+// ════════════════════════════════════════
+const IMAGE_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Biome_Tree.jpg/300px-Biome_Tree.jpg';
+// ════════════════════════════════════════
+
+const TSIZE = 100;
+let tiles = [], moveCount = 0, seconds = 0;
+let timerInterval = null, gameStarted = false;
+
+const gridEl = document.getElementById('puzzle-grid');
+const srcCanvas = document.getElementById('source-canvas');
+const srcCtx = srcCanvas.getContext('2d');
+document.getElementById('ref-img').src = IMAGE_URL;
+
+const img = new Image();
+img.crossOrigin = 'anonymous';
+img.onload = () => {
+  const scale = Math.max(300/img.width, 300/img.height);
+  const w = img.width*scale, h = img.height*scale;
+  srcCtx.drawImage(img, (300-w)/2, (300-h)/2, w, h);
+  initTiles();
+};
+img.onerror = () => {
+  const cols=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#00bcd4'];
+  for(let i=0;i<9;i++){
+    srcCtx.fillStyle=cols[i]; srcCtx.fillRect((i%3)*100,Math.floor(i/3)*100,100,100);
+    srcCtx.fillStyle='#fff8'; srcCtx.font='bold 32px monospace';
+    srcCtx.textAlign='center'; srcCtx.textBaseline='middle';
+    srcCtx.fillText(i+1,(i%3)*100+50,Math.floor(i/3)*100+50);
+  }
+  initTiles();
+};
+img.src = IMAGE_URL;
+
+function initTiles(){
+  tiles=Array.from({length:9},(_,i)=>i);
+  moveCount=0; seconds=0; gameStarted=false;
+  document.getElementById('move-count').textContent='0';
+  document.getElementById('time-display').textContent='0:00';
+  stopTimer(); document.getElementById('win-overlay').classList.remove('show');
+  renderGrid();
+}
+function shufflePuzzle(){
+  tiles=Array.from({length:9},(_,i)=>i);
+  let blank=8;
+  for(let i=0;i<300;i++){
+    const ns=neighbors(blank), pick=ns[Math.floor(Math.random()*ns.length)];
+    [tiles[blank],tiles[pick]]=[tiles[pick],tiles[blank]]; blank=pick;
+  }
+  moveCount=0; seconds=0; gameStarted=false;
+  document.getElementById('move-count').textContent='0';
+  document.getElementById('time-display').textContent='0:00';
+  stopTimer(); document.getElementById('win-overlay').classList.remove('show');
+  renderGrid();
+}
+function resetPuzzle(){ initTiles(); }
+function neighbors(pos){
+  const r=Math.floor(pos/3),c=pos%3,ns=[];
+  if(r>0)ns.push(pos-3); if(r<2)ns.push(pos+3);
+  if(c>0)ns.push(pos-1); if(c<2)ns.push(pos+1);
+  return ns;
+}
+function renderGrid(){
+  gridEl.innerHTML='';
+  for(let pos=0;pos<9;pos++){
+    const tIdx=tiles[pos];
+    const div=document.createElement('div');
+    div.className='tile'+(tIdx===8?' empty':'');
+    if(tIdx!==8){
+      const col=tIdx%3, row=Math.floor(tIdx/3);
+      const off=document.createElement('canvas');
+      off.width=TSIZE; off.height=TSIZE;
+      off.getContext('2d').drawImage(srcCanvas,col*TSIZE,row*TSIZE,TSIZE,TSIZE,0,0,TSIZE,TSIZE);
+      div.style.backgroundImage=`url(${off.toDataURL()})`;
+      div.addEventListener('click',()=>handleClick(pos));
+    }
+    gridEl.appendChild(div);
+  }
+}
+function handleClick(pos){
+  const blank=tiles.indexOf(8);
+  if(!neighbors(blank).includes(pos))return;
+  if(!gameStarted){gameStarted=true;startTimer();}
+  const el=gridEl.children[pos];
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  [tiles[blank],tiles[pos]]=[tiles[pos],tiles[blank]];
+  moveCount++; document.getElementById('move-count').textContent=moveCount;
+  renderGrid();
+  if(tiles.every((t,i)=>t===i)){
+    stopTimer();
+    setTimeout(()=>{
+      document.getElementById('win-sub').textContent=
+        `${moveCount} moves · ${document.getElementById('time-display').textContent}`;
+      document.getElementById('win-overlay').classList.add('show');
+    },180);
+  }
+}
+function startTimer(){
+  timerInterval=setInterval(()=>{
+    seconds++;
+    document.getElementById('time-display').textContent=
+      `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
+  },1000);
+}
+function stopTimer(){clearInterval(timerInterval);timerInterval=null;}
+</script>
+</body>
+</html>
