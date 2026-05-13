@@ -71,16 +71,54 @@
   #ref-img:hover { opacity: 1; }
   #ref-label { font-size: 8px; color: #aaa; letter-spacing: 0.1em; text-transform: uppercase; }
   #top-row { display: flex; align-items: flex-end; gap: 12px; }
+
+  /* WIN OVERLAY */
   #win-overlay {
-    display: none; position: absolute; inset: 0;
-    background: rgba(255,255,255,0.82);
-    backdrop-filter: blur(4px);
+    display: none;
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(6px);
     flex-direction: column; align-items: center; justify-content: center;
-    gap: 6px; border-radius: 4px; z-index: 10;
+    gap: 10px; border-radius: 4px; z-index: 10;
+    padding: 20px;
+    text-align: center;
   }
   #win-overlay.show { display: flex; }
-  #win-msg { font-size: 20px; font-weight: 700; letter-spacing: 0.05em; color: #222; }
-  #win-sub { font-size: 10px; color: #888; letter-spacing: 0.15em; text-transform: uppercase; }
+  #win-msg {
+    font-size: 18px; font-weight: 700;
+    letter-spacing: 0.05em; color: #222;
+  }
+  #win-sub {
+    font-size: 9px; color: #999;
+    letter-spacing: 0.15em; text-transform: uppercase;
+  }
+  #win-prize-label {
+    font-size: 10px; color: #555;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-top: 4px;
+  }
+  #prize-audio {
+    width: 100%;
+    max-width: 260px;
+    margin-top: 2px;
+    border-radius: 30px;
+    outline: none;
+  }
+  /* Style the native audio player a little */
+  #prize-audio::-webkit-media-controls-panel {
+    background: rgba(240,240,240,0.9);
+  }
+  #replay-btn {
+    margin-top: 6px;
+    background: transparent;
+    border: 1px solid rgba(0,0,0,0.15);
+    color: #888;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 5px 12px; cursor: pointer; border-radius: 3px;
+    transition: all 0.15s;
+  }
+  #replay-btn:hover { border-color: rgba(0,0,0,0.3); color: #444; }
 </style>
 </head>
 <body>
@@ -89,8 +127,14 @@
   <div id="puzzle-wrap">
     <div id="puzzle-grid"></div>
     <div id="win-overlay">
-      <div id="win-msg">✓ SOLVED</div>
+      <div id="win-msg">🎉 Puzzle Solved!</div>
       <div id="win-sub"></div>
+      <div id="win-prize-label">🎵 Your Prize</div>
+      <audio id="prize-audio" controls>
+        <source src="https://www.dropbox.com/scl/fi/vshqxvmk00bv3y9hyes4q/1-Wheel-Inside-a-Well-MX1.mp3?rlkey=x677ghltiyvqffl4abb4r2063&dl=1" type="audio/mpeg" />
+        Your browser does not support the audio element.
+      </audio>
+      <button id="replay-btn" onclick="shufflePuzzle()">Play Again</button>
     </div>
   </div>
   <div id="ref-wrap">
@@ -132,11 +176,9 @@ img.onload = () => {
   const scale = Math.max(300/img.width, 300/img.height);
   const w = img.width*scale, h = img.height*scale;
   srcCtx.drawImage(img, (300-w)/2, (300-h)/2, w, h);
-  shufflePuzzle(); // ← auto-shuffle on load
+  shufflePuzzle();
 };
 img.onerror = () => {
-  console.warn('Image failed to load:', IMAGE_URL);
-  // Fallback colored tiles so puzzle is still playable
   const cols=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#00bcd4'];
   for(let i=0;i<9;i++){
     srcCtx.fillStyle=cols[i]; srcCtx.fillRect((i%3)*100,Math.floor(i/3)*100,100,100);
@@ -153,7 +195,8 @@ function initTiles(){
   moveCount=0; seconds=0; gameStarted=false;
   document.getElementById('move-count').textContent='0';
   document.getElementById('time-display').textContent='0:00';
-  stopTimer(); document.getElementById('win-overlay').classList.remove('show');
+  stopTimer();
+  hideWin();
   renderGrid();
 }
 
@@ -167,11 +210,21 @@ function shufflePuzzle(){
   moveCount=0; seconds=0; gameStarted=false;
   document.getElementById('move-count').textContent='0';
   document.getElementById('time-display').textContent='0:00';
-  stopTimer(); document.getElementById('win-overlay').classList.remove('show');
+  stopTimer();
+  hideWin();
   renderGrid();
 }
 
 function resetPuzzle(){ initTiles(); }
+
+function hideWin(){
+  const overlay = document.getElementById('win-overlay');
+  overlay.classList.remove('show');
+  // pause & reset audio when dismissed
+  const audio = document.getElementById('prize-audio');
+  audio.pause();
+  audio.currentTime = 0;
+}
 
 function neighbors(pos){
   const r=Math.floor(pos/3),c=pos%3,ns=[];
@@ -213,6 +266,9 @@ function handleClick(pos){
       document.getElementById('win-sub').textContent=
         `${moveCount} moves · ${document.getElementById('time-display').textContent}`;
       document.getElementById('win-overlay').classList.add('show');
+      // autoplay the prize audio
+      const audio = document.getElementById('prize-audio');
+      audio.play().catch(()=>{}); // catch needed for browser autoplay policy
     },180);
   }
 }
